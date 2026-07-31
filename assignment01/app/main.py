@@ -81,6 +81,29 @@ def create_task(data: dict = Body(...)):
         detail="No title has been specified"
     )
 
+@app.post("/reset", status_code=201)
+def reset_tasks():
+    global tasks
+    tasks = [
+        {
+            "id": 1,
+            "title": "First task",
+            "done": True
+        },
+        {
+            "id": 2,
+            "title": "Second task",
+            "done": True
+        },
+        {
+            "id": 3,
+            "title": "Third task",
+            "done": False
+        }
+    ]
+
+    return tasks
+    
 @app.put("/tasks/{task_id}")
 def update_task(task_id: int, data: dict = Body(...)):
     if (
