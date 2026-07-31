@@ -53,8 +53,19 @@ def read_task(task_id: int):
         detail=f"Task {task_id} not found"
     )
 
+@app.get("/stats")
+def read_stats():
+    total = len(tasks)
+    count_done = sum(1 for task in tasks if task["done"])
+    count_open = total - count_done
+    return {
+        "total": total,
+        "done": count_done,
+        "open": count_open
+    }
+
 @app.post("/tasks", status_code=201)
-def add_task(data: dict = Body(...)):
+def create_task(data: dict = Body(...)):
     title = data.get("title")
     if isinstance(title, str) and title.strip():
         tasks.append({
