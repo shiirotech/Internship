@@ -78,11 +78,15 @@ http://127.0.0.1:8000/docs
 
 - **GET /health** – Returns the current health status of the application.
 
-- **GET /tasks** – Returns a list of all tasks.
+- **GET /tasks** – Returns a list of all tasks or only those specified in query parameters.
 
 - **GET /tasks/{task_id}** – Returns the task with the specified ID.
 
+- **GET /stats** - Returns counts of: all tasks, finished and unfinished ones.
+
 - **POST /tasks** – Creates a new task.
+
+- **POST /reset** - Restores 3 example tasks and removes all newly added.
 
 - **PUT /tasks/{task_id}** – Updates the title and/or completion status of an existing task.
 
