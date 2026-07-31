@@ -33,13 +33,14 @@ def read_status():
     return {"status": "ok"}
 
 @app.get("/tasks")
-def read_tasks(done: bool | None = None):
+def read_tasks(done: bool | None = None, search: str | None = None):
+    filtered = tasks
     if done is not None:
-        if done:
-            return [task for task in tasks if task["done"] == True]
-        else:
-            return [task for task in tasks if task["done"] == False]
-    return tasks
+        filtered = [task for task in filtered if task["done"] == done]
+    if search and search.strip():
+        search = search.strip().lower()
+        filtered = [task for task in filtered if search in task["title"].lower()]
+    return filtered
 
 @app.get("/tasks/{task_id}")
 def read_task(task_id: int):
