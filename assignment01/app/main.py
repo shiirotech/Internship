@@ -25,7 +25,7 @@ def read_root():
     return {
         "name": "Task API",
         "version": "1.0",
-        "endpoints": ["/tasks"]
+        "endpoints": ["/tasks", "/health", "/stats", "/reset"]
     }
 
 @app.get("/health")
