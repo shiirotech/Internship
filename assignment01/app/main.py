@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Body
+import sqlite3
 
 app = FastAPI()
 
@@ -34,13 +35,29 @@ def read_status():
 
 @app.get("/tasks")
 def read_tasks(done: bool | None = None, search: str | None = None):
-    filtered = tasks
-    if done is not None:
-        filtered = [task for task in filtered if task["done"] == done]
-    if search and search.strip():
-        search = search.strip().lower()
-        filtered = [task for task in filtered if search in task["title"].lower()]
-    return filtered
+    with sqlite3.connect("tasks.db") as con:
+        cur = con.cursor()
+
+        query = "SELECT * FROM tasks"
+        conditions = []
+        params = []
+
+        if done is not None:
+            conditions.append("done = ?")
+            params.append(done)
+
+        if search and search.strip():
+            search = search.strip()
+            conditions.append("title LIKE ?")
+            params.append(f"%{search}%")
+
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+
+        retrieved = cur.execute(query, params)
+        tasks = retrieved.fetchall()
+
+    return tasks
 
 @app.get("/tasks/{task_id}")
 def read_task(task_id: int):
