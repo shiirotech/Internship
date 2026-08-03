@@ -3,30 +3,22 @@ import sqlite3
 
 app = FastAPI()
 
-tasks = [
-    {
-        "id": 1,
-        "title": "First task",
-        "done": True
-    },
-    {
-        "id": 2,
-        "title": "Second task",
-        "done": True
-    },
-    {
-        "id": 3,
-        "title": "Third task",
-        "done": False
-    }
-]
 
 @app.get("/")
 def read_root():
     return {
         "name": "Task API",
         "version": "1.0",
-        "endpoints": ["/tasks", "/health", "/stats", "/reset"]
+        "endpoints": [
+            "GET /tasks",
+            "GET /tasks/{task_id}",
+            "POST /tasks",
+            "PUT /tasks/{task_id}",
+            "DELETE /tasks/{task_id}",
+            "GET /health",
+            "GET /stats",
+            "POST /reset"
+        ]
     }
 
 @app.get("/health")
@@ -81,7 +73,7 @@ def read_stats():
         cur = con.cursor()
 
         total = cur.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
-        count_done = cur.execute("SELECT COUNT(*) FROM tasks WHERE done = 1").fetchone()[0]
+        count_done = cur.execute("SELECT COUNT(*) FROM tasks WHERE done = ?", (True,)).fetchone()[0]
         count_open = total - count_done
 
     return {
@@ -94,7 +86,7 @@ def read_stats():
 def create_task(data: dict = Body(...)):
     title = data.get("title")
 
-    if not isinstance(title, str) and not title.strip():
+    if not isinstance(title, str) or not title.strip():
         raise HTTPException(
             status_code=400,
             detail="No title has been specified"
