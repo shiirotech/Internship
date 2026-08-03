@@ -55,8 +55,7 @@ def read_tasks(done: bool | None = None, search: str | None = None):
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
-        retrieved = cur.execute(query, params)
-        tasks = retrieved.fetchall()
+        tasks = cur.execute(query, params).fetchall()
 
     return [dict(row) for row in tasks]
 
@@ -66,8 +65,7 @@ def read_task(task_id: int):
         con.row_factory = sqlite3.Row
         cur = con.cursor()
 
-        retrieved = cur.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
-        task = retrieved.fetchone()
+        task = cur.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
 
     if task is None:
         raise HTTPException(
@@ -91,19 +89,25 @@ def read_stats():
 @app.post("/tasks", status_code=201)
 def create_task(data: dict = Body(...)):
     title = data.get("title")
-    if isinstance(title, str) and title.strip():
-        tasks.append({
-            "id": tasks[-1]["id"] + 1,
-            "title": title,
-            "done": False
-        })
 
-        return tasks[-1]
-    
-    raise HTTPException(
-        status_code=400,
-        detail="No title has been specified"
-    )
+    if not isinstance(title, str) and not title.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="No title has been specified"
+        )
+
+    title = title.strip()
+
+    with sqlite3.connect("tasks.db") as con:
+        con.row_factory = sqlite3.Row
+        cur = con.cursor()
+
+        cur.execute("INSERT INTO tasks (title, done) VALUES (?, ?)", (title, False))
+        task_id = cur.lastrowid
+
+        task = cur.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+
+        return dict(task)
 
 @app.post("/reset", status_code=201)
 def reset_tasks():
