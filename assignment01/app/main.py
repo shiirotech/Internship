@@ -143,10 +143,10 @@ def update_task(task_id: int, data: dict = Body(...)):
             detail="Empty or invalid body"
         )
 
-    has_title = "title" in data
-    has_done = "done" in data
+    conditions = []
+    params = []
 
-    if has_title:
+    if "title" in data:
         title = data["title"]
 
         if not isinstance(title, str) or not title.strip():
@@ -154,9 +154,11 @@ def update_task(task_id: int, data: dict = Body(...)):
                 status_code=400,
                 detail="The title should be a non-empty string"
             )
-        title = title.strip()
+        
+        conditions.append("title = ?")
+        params.append(title.strip())
 
-    if has_done:
+    if "done" in data:
         done = data["done"]
 
         if not isinstance(done, bool):
@@ -165,18 +167,28 @@ def update_task(task_id: int, data: dict = Body(...)):
                 detail="Done should be a boolean value (true or false)"
             )
 
-    for task in tasks:
-        if task["id"] == task_id:
-            if has_title:
-                task["title"] = title
-            if has_done:
-                task["done"] = done
-            return task
+        conditions.append("done = ?")
+        params.append(done)
 
-    raise HTTPException(
-        status_code=404,
-        detail=f"Task {task_id} not found"
-    )
+    params.append(task_id)
+
+    with sqlite3.connect("tasks.db") as con:
+        con.row_factory = sqlite3.Row
+        cur = con.cursor()
+
+        query = "UPDATE tasks SET " + ", ".join(conditions) + " WHERE id = ?"
+
+        cur.execute(query, params)
+    
+        if cur.rowcount == 0:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Task {task_id} not found"
+            )
+
+        task = cur.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+
+    return dict(task)
 
 @app.delete("/tasks/{task_id}", status_code=204)
 def delete_task(task_id: int):
