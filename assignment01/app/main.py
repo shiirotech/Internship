@@ -115,26 +115,22 @@ def create_task(data: dict = Body(...)):
 
 @app.post("/reset", status_code=201)
 def reset_tasks():
-    global tasks
-    tasks = [
-        {
-            "id": 1,
-            "title": "First task",
-            "done": True
-        },
-        {
-            "id": 2,
-            "title": "Second task",
-            "done": True
-        },
-        {
-            "id": 3,
-            "title": "Third task",
-            "done": False
-        }
-    ]
+    with sqlite3.connect("tasks.db") as con:
+        con.row_factory = sqlite3.Row
+        cur = con.cursor()
 
-    return tasks
+        cur.execute("DELETE FROM tasks")
+
+        data = [
+            ("First task", False),
+            ("Second task", False),
+            ("Third task", False)
+        ]
+        cur.executemany("INSERT INTO tasks(title, done) VALUES (?, ?)", data)
+
+        tasks = cur.execute("SELECT * FROM tasks").fetchall()
+
+    return [dict(task) for task in tasks]
     
 @app.put("/tasks/{task_id}")
 def update_task(task_id: int, data: dict = Body(...)):
