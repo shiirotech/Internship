@@ -36,6 +36,7 @@ def read_status():
 @app.get("/tasks")
 def read_tasks(done: bool | None = None, search: str | None = None):
     with sqlite3.connect("tasks.db") as con:
+        con.row_factory = sqlite3.Row
         cur = con.cursor()
 
         query = "SELECT * FROM tasks"
@@ -57,18 +58,24 @@ def read_tasks(done: bool | None = None, search: str | None = None):
         retrieved = cur.execute(query, params)
         tasks = retrieved.fetchall()
 
-    return tasks
+    return [dict(row) for row in tasks]
 
 @app.get("/tasks/{task_id}")
 def read_task(task_id: int):
-    for task in tasks:
-        if task["id"] == task_id:
-            return task
-        
-    raise HTTPException(
-        status_code=404,
-        detail=f"Task {task_id} not found"
-    )
+    with sqlite3.connect("tasks.db") as con:
+        con.row_factory = sqlite3.Row
+        cur = con.cursor()
+
+        retrieved = cur.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
+        task = retrieved.fetchone()
+
+    if task is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Task {task_id} not found"
+        )
+
+    return dict(task)
 
 @app.get("/stats")
 def read_stats():
