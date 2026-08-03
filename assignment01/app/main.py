@@ -107,7 +107,7 @@ def create_task(data: dict = Body(...)):
 
         task = cur.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
 
-        return dict(task)
+    return dict(task)
 
 @app.post("/reset", status_code=201)
 def reset_tasks():
@@ -192,12 +192,13 @@ def update_task(task_id: int, data: dict = Body(...)):
 
 @app.delete("/tasks/{task_id}", status_code=204)
 def delete_task(task_id: int):
-    for i, task in enumerate(tasks):
-        if task["id"] == task_id:
-            tasks.pop(i)
-            return
-        
-    raise HTTPException(
-        status_code=404,
-        detail=f"Task {task_id} not found"
-    )
+    with sqlite3.connect("tasks.db") as con:
+        cur = con.cursor()
+
+        cur.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+
+        if cur.rowcount == 0:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Task {task_id} not found"
+            )
