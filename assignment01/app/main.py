@@ -77,9 +77,13 @@ def read_task(task_id: int):
 
 @app.get("/stats")
 def read_stats():
-    total = len(tasks)
-    count_done = sum(1 for task in tasks if task["done"])
-    count_open = total - count_done
+    with sqlite3.connect("tasks.db") as con:
+        cur = con.cursor()
+
+        total = cur.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+        count_done = cur.execute("SELECT COUNT(*) FROM tasks WHERE done = 1").fetchone()[0]
+        count_open = total - count_done
+
     return {
         "total": total,
         "done": count_done,
