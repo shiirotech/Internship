@@ -26,7 +26,7 @@ def read_status():
     return {"status": "ok"}
 
 @app.get("/tasks")
-def read_tasks(done: bool | None = None, search: str | None = None):
+def read_tasks(done: bool | None = None, search: str | None = None, sort: str | None = None):
     with sqlite3.connect("tasks.db") as con:
         con.row_factory = sqlite3.Row
         cur = con.cursor()
@@ -46,6 +46,22 @@ def read_tasks(done: bool | None = None, search: str | None = None):
 
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
+
+        if sort and sort.strip():
+            sort = sort.strip().lower()
+            if sort == "title":
+                query += " ORDER BY title"
+            elif sort == "-title":
+                query += " ORDER BY title DESC"
+            elif sort == "id":
+                query += " ORDER BY id"
+            elif sort == "-id":
+                query += " ORDER BY id DESC"
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Unable to sort using current parameter"
+                )
 
         tasks = cur.execute(query, params).fetchall()
 
