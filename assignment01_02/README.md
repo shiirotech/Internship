@@ -2,7 +2,7 @@
 
 A simple REST API for managing tasks, built with **FastAPI** as part of the **FlyRank AI Internship**.
 
-The project demonstrates the implementation of CRUD (Create, Read, Update, Delete) operations using an in-memory list of tasks.
+The project demonstrates the implementation of CRUD (Create, Read, Update, Delete) operations with persistent storage using a SQLite database.
 
 ---
 
@@ -13,9 +13,25 @@ The project demonstrates the implementation of CRUD (Create, Read, Update, Delet
 - Retrieve a task by its ID
 - Update a task's title and/or completion status
 - Delete a task
+- Persistent data storage with SQLite
+- Automatic task timestamps (`created_at`, `updated_at`)
+- Filtering tasks by completion status
+- Searching tasks by title
+- Sorting tasks by title or ID
+- Task statistics endpoint
+- Reset database to example data
 - Input validation with meaningful error responses
 
 ---
+
+## Why SQLite?
+
+SQLite was chosen because it is lightweight and requires zero additional setup. The entire database is stored in a single file, making it simple to use while still providing persistent storage that survives application restarts.
+
+The database file is called `tasks.db`. It is created automatically when the application initializes the database. The file is usually added to `.gitignore`, so every clone of the repository starts with a fresh database generated locally.
+
+---
+
 
 ## Installation
 
@@ -23,7 +39,7 @@ Clone the repository, navigate to the project directory, and create a virtual en
 
 ```bash
 git clone https://github.com/shiirotech/Internship.git
-cd Internship/assignment01
+cd Internship/assignment01_02
 
 python -m venv .venv
 ```
@@ -70,7 +86,25 @@ The interactive API documentation is available at:
 http://127.0.0.1:8000/docs
 ```
 
+![Swagger UI](/assignment01_02/screenshots/swagger_ui.png)
+
 ---
+
+## Database
+
+The application uses SQLite for persistent storage.
+
+The database file:
+
+```
+tasks.db
+```
+
+is created automatically when the database initialization script is executed.
+
+You can use **DB Browser** app to interact and observe the db itself.
+
+![DB Browser](/assignment01_02/screenshots/db_browser.png)
 
 ## API Endpoints
 
@@ -78,7 +112,12 @@ http://127.0.0.1:8000/docs
 
 - **GET /health** – Returns the current health status of the application.
 
-- **GET /tasks** – Returns a list of all tasks or only those specified in query parameters.
+- **GET /tasks** – Returns a list of all tasks. Optional query parameters can be used to filter tasks by completion status (`done`), search tasks by title (`search`), and sort results by title or ID (`sort`).
+Available sorting values:
+`title`,
+`-title`,
+`id` and
+`-id`.
 
 - **GET /tasks/{task_id}** – Returns the task with the specified ID.
 
@@ -113,6 +152,8 @@ Example response:
 {
     "id": 4,
     "title": "New task",
-    "done": false
+    "done": 0,
+    "created_at": "2026-08-04T14:30:00",
+    "updated_at": "2026-08-04T14:30:00"
 }
 ```
