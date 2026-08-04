@@ -1,5 +1,9 @@
 from fastapi import FastAPI, HTTPException, Body
+from datetime import datetime
 import sqlite3
+
+def get_timestamp():
+    return datetime.now().replace(microsecond=0).isoformat()
 
 app = FastAPI()
 
@@ -10,7 +14,7 @@ def read_root():
         "name": "Task API",
         "version": "1.0",
         "endpoints": [
-            "GET /tasks",
+            "GET /tasks?done=<bool>&search=<text>&sort=<field>",
             "GET /tasks/{task_id}",
             "POST /tasks",
             "PUT /tasks/{task_id}",
@@ -114,7 +118,13 @@ def create_task(data: dict = Body(...)):
         con.row_factory = sqlite3.Row
         cur = con.cursor()
 
-        cur.execute("INSERT INTO tasks (title, done) VALUES (?, ?)", (title, False))
+        now = get_timestamp()
+
+        cur.execute(
+            """INSERT INTO tasks(title, done, created_at, updated_at)
+            VALUES (?, ?, ?, ?)""", (title, False, now, now)
+        )
+        
         task_id = cur.lastrowid
 
         task = cur.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
@@ -129,12 +139,18 @@ def reset_tasks():
 
         cur.execute("DELETE FROM tasks")
 
+        now = get_timestamp()
+
         data = [
-            ("First task", False),
-            ("Second task", False),
-            ("Third task", False)
+            ("First task", False, now, now),
+            ("Second task", False, now, now),
+            ("Third task", False, now, now)
         ]
-        cur.executemany("INSERT INTO tasks(title, done) VALUES (?, ?)", data)
+        
+        cur.executemany(
+            """INSERT INTO tasks(title, done, created_at, updated_at)
+            VALUES (?, ?, ?, ?)""", data
+        )
 
         tasks = cur.execute("SELECT * FROM tasks").fetchall()
 
@@ -177,6 +193,11 @@ def update_task(task_id: int, data: dict = Body(...)):
 
         conditions.append("done = ?")
         params.append(done)
+
+    now = get_timestamp()
+
+    conditions.append("updated_at = ?")
+    params.append(now)
 
     params.append(task_id)
 
