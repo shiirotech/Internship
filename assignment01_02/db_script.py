@@ -1,40 +1,43 @@
-import sqlite3
+import psycopg
+import os
+from dotenv import load_dotenv
 from datetime import datetime
 
-con = sqlite3.connect("assignment01/tasks.db")
-cur = con.cursor()
+load_dotenv()
 
-# create "tasks" table
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-cur.execute("""
-CREATE TABLE IF NOT EXISTS tasks(
-    id INTEGER PRIMARY KEY,
-    title TEXT,
-    done BOOLEAN,
-    created_at TEXT,
-    updated_at TEXT
-)
-""")
+with psycopg.connect(DATABASE_URL) as con:
+    with con.cursor() as cur:
 
-# seed 3 example tasks
+        # create "tasks" table
 
-cur.execute("SELECT COUNT(*) FROM tasks")
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS tasks(
+            id SERIAL PRIMARY KEY,
+            title TEXT,
+            done BOOLEAN,
+            created_at TEXT,
+            updated_at TEXT
+        )
+        """)
 
-count = cur.fetchone()[0]
+        # seed 3 example tasks
 
-if count == 0:
-    now = datetime.now().replace(microsecond=0).isoformat()
+        cur.execute("SELECT COUNT(*) FROM tasks")
 
-    data = [
-        ("First task", False, now, now),
-        ("Second task", False, now, now),
-        ("Third task", False, now, now)
-    ]
+        count = cur.fetchone()[0]
 
-    cur.executemany(
-        """INSERT INTO tasks(title, done, created_at, updated_at)
-        VALUES (?, ?, ?, ?)""", data
-    )
+        if count == 0:
+            now = datetime.now().replace(microsecond=0).isoformat()
 
-con.commit()
-con.close()
+            data = [
+                ("First task", False, now, now),
+                ("Second task", False, now, now),
+                ("Third task", False, now, now)
+            ]
+
+            cur.executemany(
+                """INSERT INTO tasks(title, done, created_at, updated_at)
+                VALUES (%s, %s, %s, %s)""", data
+            )
