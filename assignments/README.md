@@ -2,7 +2,7 @@
 
 A simple REST API for managing tasks, built with **FastAPI** as part of the **FlyRank AI Internship**.
 
-The project demonstrates the implementation of CRUD (Create, Read, Update, Delete) operations with persistent storage using a SQLite database.
+The project demonstrates the implementation of CRUD (Create, Read, Update, Delete) operations with persistent storage using a PostgreSQL database.
 
 ---
 
@@ -13,7 +13,7 @@ The project demonstrates the implementation of CRUD (Create, Read, Update, Delet
 - Retrieve a task by its ID
 - Update a task's title and/or completion status
 - Delete a task
-- Persistent data storage with SQLite
+- Persistent data storage with PostgreSQL
 - Automatic task timestamps (`created_at`, `updated_at`)
 - Filtering tasks by completion status
 - Searching tasks by title
@@ -24,22 +24,38 @@ The project demonstrates the implementation of CRUD (Create, Read, Update, Delet
 
 ---
 
-## Why SQLite?
+## Why PostgreSQL?
 
-SQLite was chosen because it is lightweight and requires zero additional setup. The entire database is stored in a single file, making it simple to use while still providing persistent storage that survives application restarts.
-
-The database file is called `tasks.db`. It is created automatically when the application initializes the database. The file is usually added to `.gitignore`, so every clone of the repository starts with a fresh database generated locally.
+PostgreSQL was chosen because it is a powerful and reliable relational database suitable for applications that may grow beyond a simple local setup. Unlike SQLite, PostgreSQL runs as a separate database server and supports multiple concurrent connections while providing strong data integrity and transaction features.
 
 ---
 
+## Installation (using Docker Desktop)
 
-## Installation
+Clone the repository, navigate to the project directory and start the application (make sure Docker Desktop is running):
+
+```bash
+git clone https://github.com/shiirotech/Internship.git
+cd Internship/assignments
+
+docker compose up --build
+```
+
+For any subsequent runs use:
+
+```bash
+docker compose up
+```
+
+---
+
+## Installation (manual)
 
 Clone the repository, navigate to the project directory, and create a virtual environment:
 
 ```bash
 git clone https://github.com/shiirotech/Internship.git
-cd Internship/assignment01_02
+cd Internship/assignments
 
 python -m venv .venv
 ```
@@ -64,7 +80,17 @@ Install the dependencies:
 pip install -r requirements.txt
 ```
 
----
+### PostgreSQL
+
+Make sure PostgreSQL 17 is running locally on port `5432`.
+
+Create a database named `tasks` and initialize its schema using `db/init.sql`.
+
+The connection string in `.env` should point to the local PostgreSQL instance:
+
+`DATABASE_URL=postgres://postgres:<password>@127.0.0.1:5432/tasks`
+
+Adjust the username, password, and database name if your local PostgreSQL configuration differs.
 
 ## Running the application
 
@@ -86,25 +112,21 @@ The interactive API documentation is available at:
 http://127.0.0.1:8000/docs
 ```
 
-![Swagger UI](/assignment01_02/screenshots/swagger_ui.png)
+![Swagger UI](/assignments/screenshots/swagger_ui.png)
 
 ---
 
 ## Database
 
-The application uses SQLite for persistent storage.
+The application uses PostgreSQL for persistent storage.
 
-The database file:
+When using Docker Compose, PostgreSQL runs in a Docker container, with its data stored in a persistent Docker volume called `taskdata`.
 
-```
-tasks.db
-```
+The database schema and initial seed data are created automatically from `db/init.sql` when the database is initialized for the first time.
 
-is created automatically when the database initialization script is executed.
+You can use **pgAdmin** or another PostgreSQL client to connect to and interact with the database.
 
-You can use **DB Browser** app to interact and observe the db itself.
-
-![DB Browser](/assignment01_02/screenshots/db_browser.png)
+![pgAdmin](/assignments/screenshots/pgAdmin.png)
 
 ## API Endpoints
 
@@ -152,7 +174,7 @@ Example response:
 {
     "id": 4,
     "title": "New task",
-    "done": 0,
+    "done": false,
     "created_at": "2026-08-04T14:30:00",
     "updated_at": "2026-08-04T14:30:00"
 }
