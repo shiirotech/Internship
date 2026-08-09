@@ -1,0 +1,16 @@
+# Virtual environments
+.venv/
+venv/
+
+# Python
+__pycache__
+*.py[cod]
+
+# Environmental variables
+.env
+
+# Git
+.git/
+
+# screenshots
+screenshots/
