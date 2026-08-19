@@ -28,7 +28,10 @@ def read_root() -> dict:
 
 @app.get("/health")
 def read_status() -> dict:
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "db": repository.db_status()
+    }
 
 
 @app.get("/tasks")

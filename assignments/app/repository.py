@@ -15,6 +15,15 @@ def get_timestamp() -> str:
 
 class PostgresTaskRepository:
 
+    def db_status(self) -> str:
+        try:
+            with psycopg.connect(DATABASE_URL) as con:
+                with con.cursor() as cur:
+                    cur.execute("SELECT 1")
+                    return "ok"
+        except psycopg.OperationalError:
+            return "bad"
+
     def read_tasks(
         self,
         done: bool | None = None,
@@ -177,7 +186,7 @@ class PostgresTaskRepository:
 
 
     def delete_task(self, task_id: int) -> None:
-        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as con:
+        with psycopg.connect(DATABASE_URL) as con:
             with con.cursor() as cur:
 
                 cur.execute("DELETE FROM tasks WHERE id = %s", (task_id,))
