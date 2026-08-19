@@ -1,11 +1,49 @@
 from fastapi import FastAPI, HTTPException, Body
 from app.repository import PostgresTaskRepository
+from app.supabase_client import supabase
 
 
 app = FastAPI()
 
 
 repository = PostgresTaskRepository()
+
+
+@app.post("/auth/signup", status_code=201)
+def sign_up(data: dict = Body(...)):
+    email = data.get("email")
+    password = data.get("password")
+
+    if not email and not password:
+        raise HTTPException(
+            status_code=400,
+            detail="Email and password are missing"
+        )
+
+    if not email:
+        raise HTTPException(
+            status_code=400,
+            detail="Email is missing"
+        )
+
+    if not password:
+        raise HTTPException(
+            status_code=400,
+            detail="Password is missing"
+        )
+
+    try:
+        response = supabase.auth.sign_up({
+            "email": email,
+            "password": password
+        })
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+
+    return response.user
 
 
 @app.get("/")
