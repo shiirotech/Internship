@@ -9,8 +9,7 @@ app = FastAPI()
 repository = PostgresTaskRepository()
 
 
-@app.post("/auth/signup", status_code=201)
-def sign_up(data: dict = Body(...)):
+def signup_login_helper(data: dict = Body(...)) -> tuple[str, str]:
     email = data.get("email")
     password = data.get("password")
 
@@ -32,6 +31,13 @@ def sign_up(data: dict = Body(...)):
             detail="Password is missing"
         )
 
+    return (email, password)
+
+
+@app.post("/auth/signup", status_code=201)
+def sign_up(data: dict = Body(...)):
+    email, password = signup_login_helper(data)
+
     try:
         response = supabase.auth.sign_up({
             "email": email,
@@ -44,6 +50,27 @@ def sign_up(data: dict = Body(...)):
         )
 
     return response.user
+
+
+@app.post("/auth/login")
+def log_in(data: dict = Body(...)) -> dict:
+    email, password = signup_login_helper(data)
+
+    try:
+        response = supabase.auth.sign_in_with_password({
+            "email": email,
+            "password": password
+        })
+    except Exception:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid login credentials"
+        )
+
+    return {
+        "access_token": response.session.access_token,
+        "refresh_token": response.session.refresh_token
+    }
 
 
 @app.get("/")
