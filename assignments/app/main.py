@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, Header
 from app.repository import PostgresTaskRepository
 from app.supabase_client import supabase
 
@@ -71,6 +71,37 @@ def log_in(data: dict = Body(...)) -> dict:
         "access_token": response.session.access_token,
         "refresh_token": response.session.refresh_token
     }
+
+
+@app.get("/public/info")
+def public_info() -> dict:
+    return { "message": "Welcome stranger! This info is public." }
+
+
+@app.get("/protected/profile")
+def protected_profile(authorization: str | None = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="Access token required"
+        )
+
+    token = authorization.removeprefix("Bearer ").strip()
+
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="Access token required"
+        )
+    try:
+        response = supabase.auth.get_user(token)
+    except Exception:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token"
+        )
+
+    return response.user
 
 
 @app.get("/")
