@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Body, Header
+from fastapi import FastAPI, HTTPException, Body, Header, Depends
 from app.repository import PostgresTaskRepository
 from app.supabase_client import supabase
 
@@ -32,6 +32,31 @@ def signup_login_helper(data: dict = Body(...)) -> tuple[str, str]:
         )
 
     return (email, password)
+
+
+def get_current_user(authorization: str | None = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="Access token required"
+        )
+
+    token = authorization.removeprefix("Bearer ").strip()
+
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="Access token required"
+        )
+    try:
+        response = supabase.auth.get_user(token)
+    except Exception:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token"
+        )
+
+    return response.user
 
 
 @app.post("/auth/signup", status_code=201)
@@ -73,35 +98,30 @@ def log_in(data: dict = Body(...)) -> dict:
     }
 
 
+@app.post("/auth/logout", status_code=204)
+def log_out(_: object = Depends(get_current_user)) -> None:
+    supabase.auth.sign_out()
+    
+
 @app.get("/public/info")
 def public_info() -> dict:
     return { "message": "Welcome stranger! This info is public." }
 
 
 @app.get("/protected/profile")
-def protected_profile(authorization: str | None = Header(None)):
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=401,
-            detail="Access token required"
-        )
+def protected_profile(user=Depends(get_current_user)):
+    return user
 
-    token = authorization.removeprefix("Bearer ").strip()
 
-    if not token:
-        raise HTTPException(
-            status_code=401,
-            detail="Access token required"
-        )
-    try:
-        response = supabase.auth.get_user(token)
-    except Exception:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or expired token"
-        )
-
-    return response.user
+@app.get("/protected/dashboard")
+def protected_dashboard(user=Depends(get_current_user)) -> dict:
+    return {
+        "user": {
+            "id": user.id,
+            "email": user.email
+        },
+        "message": f"Welcome, {user.email}!"
+    }
 
 
 @app.get("/")
