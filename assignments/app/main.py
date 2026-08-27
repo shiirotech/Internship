@@ -1,9 +1,11 @@
-from fastapi import FastAPI, HTTPException, Body, Header, Depends
+from fastapi import FastAPI, HTTPException, Body, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.repository import PostgresTaskRepository
 from app.supabase_client import supabase
 
 
 app = FastAPI()
+security = HTTPBearer()
 
 
 repository = PostgresTaskRepository()
@@ -34,20 +36,9 @@ def signup_login_helper(data: dict = Body(...)) -> tuple[str, str]:
     return (email, password)
 
 
-def get_current_user(authorization: str | None = Header(None)):
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=401,
-            detail="Access token required"
-        )
+def get_current_user(authorization: HTTPAuthorizationCredentials = Depends(security)):
+    token = authorization.credentials
 
-    token = authorization.removeprefix("Bearer ").strip()
-
-    if not token:
-        raise HTTPException(
-            status_code=401,
-            detail="Access token required"
-        )
     try:
         response = supabase.auth.get_user(token)
     except Exception:
@@ -68,10 +59,10 @@ def sign_up(data: dict = Body(...)):
             "email": email,
             "password": password
         })
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=400,
-            detail=str(e)
+            detail="Invalid format"
         )
 
     return response.user
@@ -137,7 +128,13 @@ def read_root() -> dict:
             "DELETE /tasks/{task_id}",
             "GET /health",
             "GET /stats",
-            "POST /reset"
+            "POST /reset",
+            "POST /auth/signup",
+            "POST /auth/login",
+            "POST /auth/logout",
+            "GET /public/info",
+            "GET /protected/profile",
+            "GET /protected/dashboard",
         ]
     }
 
