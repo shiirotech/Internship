@@ -92,6 +92,30 @@ def log_in(data: dict = Body(...)) -> dict:
 @app.post("/auth/logout", status_code=204)
 def log_out(_: object = Depends(get_current_user)) -> None:
     supabase.auth.sign_out()
+
+
+@app.post("/auth/refresh")
+def refresh_access_token(data: dict = Body(...)) -> dict:
+    refresh_token = data.get("refresh_token")
+
+    if not refresh_token:
+        raise HTTPException(
+            status_code=400,
+            detail="Refresh token required"
+        )
+
+    try:
+        refreshed = supabase.auth.refresh_session(refresh_token)
+    except Exception:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired refresh token"
+        )
+
+    return {
+        "access_token": refreshed.session.access_token,
+        "refresh_token": refreshed.session.refresh_token
+    }    
     
 
 @app.get("/public/info")
@@ -115,6 +139,17 @@ def protected_dashboard(user=Depends(get_current_user)) -> dict:
     }
 
 
+@app.get("/protected/admin")
+def protected_admin(user=Depends(get_current_user)) -> dict:
+    if user.email != "admin@gmail.com":
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden"
+        )
+    
+    return { "message": "Welcome, admin!" }
+
+
 @app.get("/")
 def read_root() -> dict:
     return {
@@ -132,9 +167,11 @@ def read_root() -> dict:
             "POST /auth/signup",
             "POST /auth/login",
             "POST /auth/logout",
+            "GET /auth/refresh",
             "GET /public/info",
             "GET /protected/profile",
             "GET /protected/dashboard",
+            "GET /protected/admin"
         ]
     }
 
