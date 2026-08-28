@@ -15,12 +15,6 @@ def signup_login_helper(data: dict = Body(...)) -> tuple[str, str]:
     email = data.get("email")
     password = data.get("password")
 
-    if not email and not password:
-        raise HTTPException(
-            status_code=400,
-            detail="Email and password are missing"
-        )
-
     if not email:
         raise HTTPException(
             status_code=400,
@@ -167,7 +161,7 @@ def read_root() -> dict:
             "POST /auth/signup",
             "POST /auth/login",
             "POST /auth/logout",
-            "GET /auth/refresh",
+            "POST /auth/refresh",
             "GET /public/info",
             "GET /protected/profile",
             "GET /protected/dashboard",
@@ -186,12 +180,13 @@ def read_status() -> dict:
 
 @app.get("/tasks")
 def read_tasks(
+    user=Depends(get_current_user),
     done: bool | None = None,
     search: str | None = None,
     sort: str | None = None
 ) -> list[dict]:
     try:
-        return repository.read_tasks(done, search, sort)
+        return repository.read_tasks(user.id, done, search, sort)
     except ValueError as e:
         raise HTTPException(
             status_code=400,
@@ -200,8 +195,8 @@ def read_tasks(
     
 
 @app.get("/tasks/{task_id}")
-def read_task(task_id: int) -> dict:
-    task = repository.read_task(task_id)
+def read_task(task_id: int, user=Depends(get_current_user)) -> dict:
+    task = repository.read_task(task_id, user.id)
 
     if task is None:
         raise HTTPException(
@@ -213,12 +208,12 @@ def read_task(task_id: int) -> dict:
 
 
 @app.get("/stats")
-def read_stats() -> dict:
-    return repository.read_stats()
+def read_stats(user=Depends(get_current_user)) -> dict:
+    return repository.read_stats(user.id)
 
 
 @app.post("/tasks", status_code=201)
-def create_task(data: dict = Body(...)) -> dict:
+def create_task(data: dict = Body(...), user=Depends(get_current_user)) -> dict:
     title = data.get("title")
 
     if not isinstance(title, str) or not title.strip():
@@ -229,20 +224,17 @@ def create_task(data: dict = Body(...)) -> dict:
 
     title = title.strip()
 
-    return repository.create_task(title)
+    return repository.create_task(title, user.id)
 
 
-@app.post("/reset", status_code=201)
-def reset_tasks() -> list[dict]:
-    return repository.reset_tasks()
+@app.post("/reset", status_code=204)
+def reset_tasks(user=Depends(get_current_user)) -> None:
+    repository.reset_tasks(user.id)
 
     
 @app.put("/tasks/{task_id}")
-def update_task(task_id: int, data: dict = Body(...)) -> dict:
-    if (
-        not isinstance(data, dict) or
-        ("title" not in data and "done" not in data)
-    ):
+def update_task(task_id: int, data: dict = Body(...), user=Depends(get_current_user)) -> dict:
+    if "title" not in data and "done" not in data:
         raise HTTPException(
             status_code=400,
             detail="Empty or invalid body"
@@ -268,7 +260,7 @@ def update_task(task_id: int, data: dict = Body(...)) -> dict:
                 detail="Done should be a boolean value (true or false)"
             )
 
-    task = repository.update_task(task_id, data)
+    task = repository.update_task(task_id, data, user.id)
 
     if task is None:
         raise HTTPException(
@@ -280,9 +272,9 @@ def update_task(task_id: int, data: dict = Body(...)) -> dict:
 
 
 @app.delete("/tasks/{task_id}", status_code=204)
-def delete_task(task_id: int) -> None:
+def delete_task(task_id: int, user=Depends(get_current_user)) -> None:
     try:
-        repository.delete_task(task_id)
+        repository.delete_task(task_id, user.id)
     except ValueError as e:
         raise HTTPException(
             status_code=404,

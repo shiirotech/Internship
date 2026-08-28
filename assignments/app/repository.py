@@ -9,7 +9,7 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-def get_timestamp() -> str:
+def get_timestamp() -> datetime:
     return datetime.now().replace(microsecond=0)
 
 
@@ -24,8 +24,10 @@ class PostgresTaskRepository:
         except psycopg.OperationalError:
             return "bad"
 
+
     def read_tasks(
         self,
+        user_id: str,
         done: bool | None = None,
         search: str | None = None,
         sort: str | None = None
@@ -36,6 +38,9 @@ class PostgresTaskRepository:
                 query = "SELECT * FROM tasks"
                 conditions = []
                 params = []
+
+                conditions.append("user_id = %s")
+                params.append(user_id)
         
                 if done is not None:
                     conditions.append("done = %s")
@@ -46,8 +51,7 @@ class PostgresTaskRepository:
                     conditions.append("title ILIKE %s")
                     params.append(f"%{search}%")
         
-                if conditions:
-                    query += " WHERE " + " AND ".join(conditions)
+                query += " WHERE " + " AND ".join(conditions)
         
                 if sort and sort.strip():
                     sort = sort.strip().lower()
@@ -69,26 +73,30 @@ class PostgresTaskRepository:
         return rows
 
 
-    def read_task(self, task_id: int) -> dict | None:
+    def read_task(self, task_id: int, user_id: str) -> dict | None:
         with psycopg.connect(DATABASE_URL, row_factory=dict_row) as con:
             with con.cursor() as cur:
         
-                row = cur.execute("SELECT * FROM tasks WHERE id = %s", (task_id,)).fetchone()
+                row = cur.execute(
+                    "SELECT * FROM tasks WHERE user_id = %s AND id = %s",
+                    (user_id, task_id)
+                ).fetchone()
         
         return row
 
 
-    def read_stats(self) -> dict:
+    def read_stats(self, user_id: str) -> dict:
         with psycopg.connect(DATABASE_URL, row_factory=dict_row) as con:
             with con.cursor() as cur:
 
                 total = cur.execute(
-                    "SELECT COUNT(*) FROM tasks"
+                    "SELECT COUNT(*) FROM tasks WHERE user_id = %s",
+                    (user_id,)
                 ).fetchone()["count"]
 
                 count_done = cur.execute(
-                    "SELECT COUNT(*) FROM tasks WHERE done = %s",
-                    (True,)
+                    "SELECT COUNT(*) FROM tasks WHERE user_id = %s AND done = %s",
+                    (user_id, True)
                 ).fetchone()["count"]
 
                 count_open = total - count_done
@@ -100,7 +108,7 @@ class PostgresTaskRepository:
         }
 
 
-    def create_task(self, title: str) -> dict:
+    def create_task(self, title: str, user_id: str) -> dict:
         with psycopg.connect(DATABASE_URL, row_factory=dict_row) as con:
             with con.cursor() as cur:
 
@@ -108,11 +116,11 @@ class PostgresTaskRepository:
 
                 cur.execute(
                     """
-                    INSERT INTO tasks(title, done, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO tasks(user_id, title, done, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s)
                     RETURNING *
                     """,
-                    (title, False, now, now)
+                    (user_id, title, False, now, now)
                 )
 
                 row = cur.fetchone()
@@ -120,36 +128,14 @@ class PostgresTaskRepository:
         return row
 
 
-    def reset_tasks(self) -> list[dict]:
-        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as con:
+    def reset_tasks(self, user_id: str) -> None:
+        with psycopg.connect(DATABASE_URL) as con:
             with con.cursor() as cur:
 
-                cur.execute("TRUNCATE TABLE tasks RESTART IDENTITY")
-
-                now = get_timestamp()
-                
-                cur.execute(
-                    """
-                    INSERT INTO tasks(title, done, created_at, updated_at)
-                    VALUES
-                        (%s, %s, %s, %s),
-                        (%s, %s, %s, %s),
-                        (%s, %s, %s, %s)
-                    RETURNING *
-                    """,
-                    (
-                        "First task", False, now, now,
-                        "Second task", False, now, now,
-                        "Third task", False, now, now
-                    )
-                )
-
-                rows = cur.fetchall()
-
-        return rows
+                cur.execute("DELETE FROM tasks WHERE user_id = %s", (user_id,))
 
 
-    def update_task(self, task_id: int, data: dict) -> dict | None:
+    def update_task(self, task_id: int, data: dict, user_id: str) -> dict | None:
         with psycopg.connect(DATABASE_URL, row_factory=dict_row) as con:
             with con.cursor() as cur:
 
@@ -167,14 +153,12 @@ class PostgresTaskRepository:
                 now = get_timestamp()
 
                 updates.append("updated_at = %s")
-                params.append(now)
-
-                params.append(task_id)
+                params.extend([now, user_id, task_id])
 
                 query = (
                     "UPDATE tasks SET " +
                     ", ".join(updates) +
-                    " WHERE id = %s"
+                    " WHERE user_id = %s AND id = %s"
                     " RETURNING *"
                 )
                 
@@ -185,11 +169,11 @@ class PostgresTaskRepository:
         return row
 
 
-    def delete_task(self, task_id: int) -> None:
+    def delete_task(self, task_id: int, user_id: str) -> None:
         with psycopg.connect(DATABASE_URL) as con:
             with con.cursor() as cur:
 
-                cur.execute("DELETE FROM tasks WHERE id = %s", (task_id,))
+                cur.execute("DELETE FROM tasks WHERE user_id = %s AND id = %s", (user_id, task_id))
 
                 if cur.rowcount == 0:
                     raise ValueError(
