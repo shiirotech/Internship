@@ -94,6 +94,12 @@ cd Internship/assignments
 docker compose up --build
 ```
 
+To see the documentation, visit:
+
+```
+http://127.0.0.1:8000/docs
+```
+
 For any subsequent runs use:
 
 ```bash
@@ -151,7 +157,7 @@ Adjust the username, password, and database name if your local PostgreSQL config
 
 ## Running the application
 
-Start the server:
+Start the server (required for manual installation only):
 
 ```bash
 fastapi run app/main.py
