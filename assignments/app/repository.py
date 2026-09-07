@@ -9,12 +9,12 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+
 def get_timestamp() -> datetime:
     return datetime.now().replace(microsecond=0)
 
 
 class PostgresTaskRepository:
-
     def db_status(self) -> str:
         try:
             with psycopg.connect(DATABASE_URL) as con:

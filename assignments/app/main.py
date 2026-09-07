@@ -1,7 +1,10 @@
+import json
 from fastapi import FastAPI, HTTPException, Body, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.repository import PostgresTaskRepository
 from app.supabase_client import supabase
+from app.redis_cl import redis_client
+from random import randint
 
 
 app = FastAPI()
@@ -42,6 +45,23 @@ def get_current_user(authorization: HTTPAuthorizationCredentials = Depends(secur
         )
 
     return response.user
+
+
+def get_version(version_key: str) -> int:
+    version = redis_client.get(version_key)
+
+    if version is None:
+        version = 1
+        redis_client.set(version_key, version)
+    else:
+        version = int(version)
+
+    return version
+
+
+def invalidate_user_cache(user_id: str) -> None:
+    redis_client.incr(f"tasks_version:{user_id}")
+    redis_client.incr(f"stats_version:{user_id}")
 
 
 @app.post("/auth/signup", status_code=201)
@@ -185,17 +205,50 @@ def read_tasks(
     search: str | None = None,
     sort: str | None = None
 ) -> list[dict]:
+    version_key = f"tasks_version:{user.id}"
+    version = get_version(version_key)
+
+    cache_key = f"tasks:{user.id}:v{version}:done={done}:search={search}:sort={sort}"
+    cached = redis_client.get(cache_key)
+
+    if cached is not None:
+        print("CACHE HIT")
+        return json.loads(cached)
+
+    print("CACHE MISS")
+    
     try:
-        return repository.read_tasks(user.id, done, search, sort)
+        tasks = repository.read_tasks(user.id, done, search, sort)
     except ValueError as e:
         raise HTTPException(
             status_code=400,
             detail=str(e)
         )
+
+    ttl = randint(50, 70)
+    
+    redis_client.set(
+        cache_key,
+        json.dumps(tasks, default=str),
+        ex=ttl
+    )
+
+    print("CACHE SET")
+
+    return tasks
     
 
 @app.get("/tasks/{task_id}")
 def read_task(task_id: int, user=Depends(get_current_user)) -> dict:
+    cache_key = f"task:{user.id}:{task_id}"
+    cached = redis_client.get(cache_key)
+
+    if cached is not None:
+        print("CACHE HIT")
+        return json.loads(cached)
+
+    print("CACHE MISS")
+    
     task = repository.read_task(task_id, user.id)
 
     if task is None:
@@ -204,12 +257,42 @@ def read_task(task_id: int, user=Depends(get_current_user)) -> dict:
             detail=f"Task {task_id} not found"
         )
 
+    ttl = randint(50, 70)
+        
+    redis_client.set(
+        cache_key,
+        json.dumps(task, default=str),
+        ex=ttl
+    )
+
     return task
 
 
 @app.get("/stats")
 def read_stats(user=Depends(get_current_user)) -> dict:
-    return repository.read_stats(user.id)
+    version_key = f"stats_version:{user.id}"
+    version = get_version(version_key)
+
+    cache_key = f"stats:{user.id}:v{version}"
+    cached = redis_client.get(cache_key)
+
+    if cached is not None:
+        print("CACHE HIT")
+        return json.loads(cached)
+
+    print("CACHE MISS")
+
+    stats = repository.read_stats(user.id)
+
+    ttl = randint(50, 70)
+
+    redis_client.set(
+        cache_key,
+        json.dumps(stats, default=str),
+        ex=ttl
+    )
+
+    return stats
 
 
 @app.post("/tasks", status_code=201)
@@ -224,12 +307,22 @@ def create_task(data: dict = Body(...), user=Depends(get_current_user)) -> dict:
 
     title = title.strip()
 
-    return repository.create_task(title, user.id)
+    task = repository.create_task(title, user.id)
+
+    invalidate_user_cache(user.id)
+
+    return task
 
 
 @app.post("/reset", status_code=204)
 def reset_tasks(user=Depends(get_current_user)) -> None:
     repository.reset_tasks(user.id)
+
+    keys = redis_client.keys(f"task:{user.id}:*")
+    if keys:
+        redis_client.delete(*keys)
+
+    invalidate_user_cache(user.id)
 
     
 @app.put("/tasks/{task_id}")
@@ -268,6 +361,9 @@ def update_task(task_id: int, data: dict = Body(...), user=Depends(get_current_u
             detail=f"Task {task_id} not found"
         )
 
+    redis_client.delete(f"task:{user.id}:{task_id}")
+    invalidate_user_cache(user.id)
+
     return task
 
 
@@ -280,3 +376,6 @@ def delete_task(task_id: int, user=Depends(get_current_user)) -> None:
             status_code=404,
             detail=str(e)
         )
+
+    redis_client.delete(f"task:{user.id}:{task_id}")
+    invalidate_user_cache(user.id)

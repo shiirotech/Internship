@@ -2,9 +2,7 @@
 
 A simple REST API for managing tasks, built with **FastAPI** as part of the **FlyRank AI Internship**.
 
-The project demonstrates the implementation of CRUD (Create, Read, Update, Delete) operations with persistent storage using a PostgreSQL database.
-
----
+The project demonstrates the implementation of CRUD (Create, Read, Update, Delete) operations with persistent storage using a **PostgreSQL** database, **Redis** caching, user authentication with **Supabase** and containerization with **Docker**.
 
 ## Features
 
@@ -27,8 +25,8 @@ The project demonstrates the implementation of CRUD (Create, Read, Update, Delet
 - Access token refresh using refresh tokens
 - User logout
 - Swagger UI authentication with Bearer tokens
-
----
+- Cache expiration using TTL (with jitter)
+- Cache invalidation after task mutations
 
 ## Authentication
 
@@ -60,13 +58,50 @@ Swagger UI provides an Authorize button that allows an access token to be entere
 
 ![FastAPI authorize button](/assignments/screenshots/authorize.png)
 
----
+## Database
 
-## Why PostgreSQL?
+The application uses **PostgreSQL** for persistent storage.
 
-PostgreSQL was chosen because it is a powerful and reliable relational database suitable for applications that may grow beyond a simple local setup. Unlike SQLite, PostgreSQL runs as a separate database server and supports multiple concurrent connections while providing strong data integrity and transaction features.
+When using Docker Compose, PostgreSQL runs in a Docker container, with its data stored in a persistent Docker volume called `taskdata`.
 
----
+The database schema is created automatically from `db/init.sql` when the database is initialized for the first time.
+
+Tasks are associated with a specific authenticated user through the `user_id` column. Each user's task operations are restricted to their own tasks.
+
+You can use **pgAdmin** or another PostgreSQL client to connect to and interact with the database.
+
+![pgAdmin](/assignments/screenshots/pgAdmin.png)
+
+## Caching
+
+**Redis** is used as an in-memory cache to reduce unnecessary database queries for frequently requested data.
+
+**The API caches:**
+
+* Task lists returned by GET /tasks
+* Individual tasks returned by GET /tasks/{task_id}
+* Task statistics returned by GET /stats
+
+Cached values have a random TTL between 50 and 70 seconds. The randomisation helps prevent many cache entries from expiring at the same time.
+
+### Cache invalidation
+
+The API uses different invalidation strategies depending on the type of cached data.
+
+For the task list and statistics, versioned cache keys are used:
+
+`tasks_version:<user_id>`,
+`stats_version:<user_id>`
+
+When a task is created, updated, deleted or all tasks are reset, the corresponding version is incremented. This abandons previously cached task lists and statistics without having to search for and delete every possible cache entry.
+
+Individual tasks use their own cache keys:
+
+`task:<user_id>:<task_id>`
+
+When a task is updated or deleted, only that task's cache entry is removed.
+
+When all tasks are reset, all individual task cache entries belonging to the current user are removed.
 
 ## Environment variables
 
@@ -79,20 +114,28 @@ POSTGRES_PASSWORD=your_password
 POSTGRES_DB=tasks
 SUPABASE_URL=https://xxxxx.supabase.co
 SUPABASE_KEY=sb_publishable_xxxxx
+REDIS_URL=redis://127.0.0.1:6379
 ```
 
----
+The `DATABASE_URL` and `REDIS_URL` values above are intended for running the API directly on the host machine.
+
+When using Docker Compose, the API connects to PostgreSQL and Redis through their Docker service names (`db` and `redis`) instead of `127.0.0.1`. These values are configured in `compose.yaml`.
 
 ## Installation (using Docker Desktop)
 
-Clone the repository, navigate to the project directory and start the application (make sure Docker Desktop is running):
-
+Clone the repository, navigate to the project directory and start the application. Make sure **Docker Desktop** is running.
 ```bash
 git clone https://github.com/shiirotech/Internship.git
 cd Internship/assignments
 
 docker compose up --build
 ```
+
+**The Docker Compose setup starts three services:**
+
+* `API` – FastAPI application
+* `PostgreSQL` – persistent database
+* `Redis` – in-memory cache
 
 To see the documentation, visit:
 
@@ -106,9 +149,14 @@ For any subsequent runs use:
 docker compose up
 ```
 
-When running with Docker Compose, the `DATABASE_URL` is configured automatically using the PostgreSQL service name `db`. The `.env` value using `127.0.0.1` is intended for manual/local execution only.
+**When running with Docker Compose:**
 
----
+* PostgreSQL is available to the API as `db:5432`
+* Redis is available to the API as `redis:6379`
+* The PostgreSQL data is stored in a persistent Docker volume
+* Redis does not need to expose port `6379` to the host because it is only accessed by the API container
+
+The `.env` values using `127.0.0.1` are intended for manual/local execution only.
 
 ## Installation (manual)
 
@@ -153,7 +201,13 @@ The connection string in `.env` should point to the local PostgreSQL instance:
 
 Adjust the username, password, and database name if your local PostgreSQL configuration differs.
 
----
+### Redis
+
+Make sure Redis is running locally on port `6379`.
+
+The `.env` configuration should contain:
+
+`REDIS_URL=redis://127.0.0.1:6379`
 
 ## Running the application
 
@@ -176,24 +230,6 @@ http://127.0.0.1:8000/docs
 ```
 
 ![Swagger UI](/assignments/screenshots/swagger_ui.png)
-
----
-
-## Database
-
-The application uses PostgreSQL for persistent storage.
-
-When using Docker Compose, PostgreSQL runs in a Docker container, with its data stored in a persistent Docker volume called `taskdata`.
-
-The database schema is created automatically from `db/init.sql` when the database is initialized for the first time.
-
-Tasks are associated with a specific authenticated user through the `user_id` column. Each user's task operations are restricted to their own tasks.
-
-You can use **pgAdmin** or another PostgreSQL client to connect to and interact with the database.
-
-![pgAdmin](/assignments/screenshots/pgAdmin.png)
-
----
 
 ## API Endpoints
 
@@ -243,8 +279,6 @@ The following endpoints require authentication:
 - **GET /protected/admin** – Demonstrates role-like authorization by allowing access only to the configured administrator.
 
 All task and statistics endpoints also require authentication. Users can only access their own tasks and statistics.
-
----
 
 ## Example Request
 
