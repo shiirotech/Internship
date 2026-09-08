@@ -121,7 +121,7 @@ The `DATABASE_URL` and `REDIS_URL` values above are intended for running the API
 
 When using Docker Compose, the API connects to PostgreSQL and Redis through their Docker service names (`db` and `redis`) instead of `127.0.0.1`. These values are configured in `compose.yaml`.
 
-## Installation (using Docker Desktop)
+## Installation (using Docker Compose)
 
 Clone the repository, navigate to the project directory and start the application. Make sure **Docker Desktop** is running.
 ```bash
@@ -155,8 +155,6 @@ docker compose up
 * Redis is available to the API as `redis:6379`
 * The PostgreSQL data is stored in a persistent Docker volume
 * Redis does not need to expose port `6379` to the host because it is only accessed by the API container
-
-The `.env` values using `127.0.0.1` are intended for manual/local execution only.
 
 ## Installation (manual)
 
@@ -195,11 +193,7 @@ Make sure PostgreSQL 17 is running locally on port `5432`.
 
 Create a database named `tasks` and initialize its schema using `db/init.sql`.
 
-The connection string in `.env` should point to the local PostgreSQL instance:
-
-`DATABASE_URL=postgres://your_user:your_password@127.0.0.1:5432/your_db_name`
-
-Adjust the username, password, and database name if your local PostgreSQL configuration differs.
+The `DATABASE_URL` in `.env` should point to your local PostgreSQL instance. Adjust the username, password, and database name if your local PostgreSQL configuration differs.
 
 ### Redis
 
