@@ -8,6 +8,9 @@ services:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
       - REDIS_URL=redis://redis:6379
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL}
+      - LLM_ENABLED=${LLM_ENABLED}
     depends_on:
       - db
       - redis

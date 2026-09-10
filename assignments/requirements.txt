@@ -3,3 +3,5 @@ uvicorn==0.52.0
 psycopg[binary]==3.3.4
 supabase==2.31.0
 redis==8.1.0
+openai==3.11.0
+pydantic==2.13.5
