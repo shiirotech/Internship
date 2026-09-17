@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 import os
 import psycopg
 from psycopg.rows import dict_row
-from datetime import datetime
+from datetime import datetime, date
 
 
 load_dotenv()
@@ -30,7 +30,9 @@ class PostgresTaskRepository:
         user_id: str,
         done: bool | None = None,
         search: str | None = None,
-        sort: str | None = None
+        sort: str | None = None,
+        priority: str | None = None,
+        due_date: date | None = None
     ) -> list[dict]:
         with psycopg.connect(DATABASE_URL, row_factory=dict_row) as con:
             with con.cursor() as cur:
@@ -50,6 +52,14 @@ class PostgresTaskRepository:
                     search = search.strip()
                     conditions.append("title ILIKE %s")
                     params.append(f"%{search}%")
+
+                if priority is not None:
+                    conditions.append("task_priority = %s")
+                    params.append(priority)
+
+                if due_date is not None:
+                    conditions.append("due_date = %s")
+                    params.append(due_date)
         
                 query += " WHERE " + " AND ".join(conditions)
         
@@ -101,14 +111,44 @@ class PostgresTaskRepository:
 
                 count_open = total - count_done
 
+                high_priority = cur.execute(
+                    "SELECT COUNT(*) FROM tasks WHERE user_id = %s AND task_priority = %s",
+                    (user_id, "high")
+                ).fetchone()["count"]
+
+                med_priority = cur.execute(
+                    "SELECT COUNT(*) FROM tasks WHERE user_id = %s AND task_priority = %s",
+                    (user_id, "medium")
+                ).fetchone()["count"]
+
+                low_priority = total - high_priority - med_priority
+
+                no_deadline = cur.execute(
+                    "SELECT COUNT(*) FROM tasks WHERE user_id = %s AND due_date IS NULL",
+                    (user_id,)
+                ).fetchone()["count"]
+
+                has_deadline = total - no_deadline
+
         return {
             "total": total,
             "done": count_done,
-            "open": count_open
+            "open": count_open,
+            "high priority": high_priority,
+            "medium priority": med_priority,
+            "low priority": low_priority,
+            "with deadline": has_deadline,
+            "no deadline": no_deadline
         }
 
 
-    def create_task(self, title: str, user_id: str) -> dict:
+    def create_task(
+        self,
+        title: str,
+        priority: str,
+        due_date: date | None,
+        user_id: str
+    ) -> dict:
         with psycopg.connect(DATABASE_URL, row_factory=dict_row) as con:
             with con.cursor() as cur:
 
@@ -116,11 +156,11 @@ class PostgresTaskRepository:
 
                 cur.execute(
                     """
-                    INSERT INTO tasks(user_id, title, done, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s)
+                    INSERT INTO tasks(user_id, title, done, task_priority, due_date, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     RETURNING *
                     """,
-                    (user_id, title, False, now, now)
+                    (user_id, title, False, priority, due_date, now, now)
                 )
 
                 row = cur.fetchone()
@@ -149,6 +189,14 @@ class PostgresTaskRepository:
                 if "done" in data:
                     updates.append("done = %s")
                     params.append(data["done"])
+
+                if "priority" in data:
+                    updates.append("task_priority = %s")
+                    params.append(data["priority"])
+
+                if "due_date" in data:
+                    updates.append("due_date = %s")
+                    params.append(data["due_date"])
 
                 now = get_timestamp()
 

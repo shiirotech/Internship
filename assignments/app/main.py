@@ -1,10 +1,17 @@
 import json
+import inspect
+from datetime import date
+from random import randint
+
 from fastapi import FastAPI, HTTPException, Body, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import ValidationError
+
 from app.repository import PostgresTaskRepository
 from app.supabase_client import supabase
 from app.redis_cl import redis_client
-from random import randint
+from LLM.ask_model import ask
+from LLM.schema import ParsedTask
 
 
 app = FastAPI()
@@ -13,6 +20,8 @@ security = HTTPBearer()
 
 repository = PostgresTaskRepository()
 
+
+# ===== Helpers =====
 
 def signup_login_helper(data: dict = Body(...)) -> tuple[str, str]:
     email = data.get("email")
@@ -63,6 +72,33 @@ def invalidate_user_cache(user_id: str) -> None:
     redis_client.incr(f"tasks_version:{user_id}")
     redis_client.incr(f"stats_version:{user_id}")
 
+
+def check_priority(priority: str) -> str:
+    if priority not in ("low", "medium", "high"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid priority, acceptable options: low, medium, high"
+        )
+
+    return priority
+
+
+def parse_due_date(due_date: str | None) -> date | None:
+    if due_date is None:
+        return None
+    
+    try:
+        due_date = date.fromisoformat(due_date)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid due date, acceptable format: YYYY-MM-DD"
+        )
+
+    return due_date
+
+
+# ===== Supabase-related endpoints =====
 
 @app.post("/auth/signup", status_code=201)
 def sign_up(data: dict = Body(...)):
@@ -164,6 +200,59 @@ def protected_admin(user=Depends(get_current_user)) -> dict:
     return { "message": "Welcome, admin!" }
 
 
+# ===== AI-related endpoints =====
+
+@app.post(
+    "/parse-task",
+    description=inspect.cleandoc("""
+        Describe the task you want to create (up to 2000 chars).
+
+        A local LLM will try to parse it into a valid JSON.
+
+        Use the returned contents in 'POST /tasks' to create a new task.
+
+        Mention title (required), priority level (optional, default is 'medium'), due date (optional).
+
+        Example:
+
+        ```json
+        {
+          "text": "I need to finish the Redis implementation tomorrow, it's really important"
+        }
+        ```
+    """)
+)
+def parse_task(data: dict = Body(...)):
+    text = data.get("text")
+
+    if not isinstance(text, str) or not text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="No text has been specified"
+        )
+
+    if len(text) > 2000:
+        raise HTTPException(
+            status_code=400,
+            detail="Text must not exceed 2000 characters"
+        )
+
+    raw = ask(text)
+
+    try:
+        data = json.loads(raw)
+        validated_task = ParsedTask.model_validate(data)
+    except (json.JSONDecodeError, ValidationError):
+        raise HTTPException(
+            status_code=502,
+            detail="LLM returned an invalid task, try again"
+        )
+
+    return validated_task
+
+
+# ===== General endpoints =====
+
 @app.get("/")
 def read_root() -> dict:
     return {
@@ -172,6 +261,7 @@ def read_root() -> dict:
         "endpoints": [
             "GET /tasks?done=<bool>&search=<text>&sort=<field>",
             "GET /tasks/{task_id}",
+            "POST /parse-task",
             "POST /tasks",
             "PUT /tasks/{task_id}",
             "DELETE /tasks/{task_id}",
@@ -203,12 +293,24 @@ def read_tasks(
     user=Depends(get_current_user),
     done: bool | None = None,
     search: str | None = None,
-    sort: str | None = None
+    sort: str | None = None,
+    priority: str | None = None,
+    due_date: str | None = None
 ) -> list[dict]:
+    if priority is not None:
+        priority = check_priority(priority)
+
+    if due_date is not None:
+        due_date = parse_due_date(due_date)
+    
     version_key = f"tasks_version:{user.id}"
     version = get_version(version_key)
 
-    cache_key = f"tasks:{user.id}:v{version}:done={done}:search={search}:sort={sort}"
+    cache_key = (
+        f"tasks:{user.id}:v{version}:"
+        f"done={done}:search={search}:sort={sort}:"
+        f"priority={priority}:due_date={due_date}"
+    )
     cached = redis_client.get(cache_key)
 
     if cached is not None:
@@ -218,7 +320,7 @@ def read_tasks(
     print("CACHE MISS")
     
     try:
-        tasks = repository.read_tasks(user.id, done, search, sort)
+        tasks = repository.read_tasks(user.id, done, search, sort, priority, due_date)
     except ValueError as e:
         raise HTTPException(
             status_code=400,
@@ -298,16 +400,25 @@ def read_stats(user=Depends(get_current_user)) -> dict:
 @app.post("/tasks", status_code=201)
 def create_task(data: dict = Body(...), user=Depends(get_current_user)) -> dict:
     title = data.get("title")
+    priority = data.get("priority")
+    due_date = data.get("due_date")
 
     if not isinstance(title, str) or not title.strip():
         raise HTTPException(
             status_code=400,
             detail="No title has been specified"
         )
-
     title = title.strip()
 
-    task = repository.create_task(title, user.id)
+    if priority is not None:
+        priority = check_priority(priority)
+    else:
+        priority = "medium"
+    
+    if due_date is not None:
+        due_date = parse_due_date(due_date)
+
+    task = repository.create_task(title, priority, due_date, user.id)
 
     invalidate_user_cache(user.id)
 
@@ -327,7 +438,7 @@ def reset_tasks(user=Depends(get_current_user)) -> None:
     
 @app.put("/tasks/{task_id}")
 def update_task(task_id: int, data: dict = Body(...), user=Depends(get_current_user)) -> dict:
-    if "title" not in data and "done" not in data:
+    if not any(field in data for field in ("title", "done", "priority", "due_date")):
         raise HTTPException(
             status_code=400,
             detail="Empty or invalid body"
@@ -352,6 +463,12 @@ def update_task(task_id: int, data: dict = Body(...), user=Depends(get_current_u
                 status_code=400,
                 detail="Done should be a boolean value (true or false)"
             )
+
+    if "priority" in data:
+        data["priority"] = check_priority(data["priority"])
+
+    if "due_date" in data:
+        data["due_date"] = parse_due_date(data["due_date"])
 
     task = repository.update_task(task_id, data, user.id)
 
